@@ -1,0 +1,21 @@
+# Keep the image small & secret-free
+.git
+.gitignore
+**/__pycache__
+**/*.py[cod]
+.venv
+venv
+env
+.env
+.env.*
+*.log
+logs/
+uploads/
+tmp/
+*.pdf
+.vscode
+.idea
+.DS_Store
+.vercel
+.render
+README.md

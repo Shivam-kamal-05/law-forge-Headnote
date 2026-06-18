@@ -1,0 +1,29 @@
+# Render Blueprint — deploys the whole app from this repo.
+# In Render: New → Blueprint → pick this repo → it reads this file.
+# You'll be prompted for the secret values (sync:false) during setup.
+services:
+  - type: web
+    name: law-lens-headnote-forge
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free                      # change to "starter" ($7/mo) for always-on, no cold start
+    healthCheckPath: /health
+    autoDeploy: true                # redeploy on every push to the connected branch
+    envVars:
+      - key: APP_ENV
+        value: production
+      # ── Anthropic ──────────────────────────────────────────
+      - key: ANTHROPIC_API_KEY
+        sync: false                 # you paste this in the Render dashboard (never in git)
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6    # richer headnotes for the client demo
+      - key: ANTHROPIC_MAX_TOKENS
+        value: "8192"
+      # ── Auth (optional override; code already defaults to these) ──
+      - key: AUTH_USERNAME
+        sync: false
+      - key: AUTH_PASSWORD
+        sync: false
+      - key: AUTH_TOKEN_SECRET
+        sync: false

@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Law Lens — The Headnote Engine</title>
+  <meta name="description" content="AI-crafted Indian court headnotes, generated solely from the court's own words." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23dcb43a' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M12 3v18M5 8l3.5 5.5M19 8l-3.5 5.5M2 8h20'/%3E%3C/svg%3E" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink:  { 950:'#06060a', 900:'#0a0a12', 850:'#0e0e18', 800:'#13131f', 700:'#1b1b2b', 600:'#242438' },
+            gold: { 50:'#fbf6e6', 100:'#f6ebc4', 200:'#eed98c', 300:'#e6c659', 400:'#dcb43a', 500:'#cda227', 600:'#a87f1c', 700:'#7f5e18', 900:'#3f2f0d' },
+            sand: { 100:'#f7f3ea', 200:'#e9e1cf', 300:'#cabfa6' },
+          },
+          fontFamily: {
+            display: ['"Playfair Display"','Georgia','serif'],
+            accent:  ['"Cormorant Garamond"','Georgia','serif'],
+            sans:    ['Inter','system-ui','sans-serif'],
+            mono:    ['"JetBrains Mono"','monospace'],
+          },
+          letterSpacing: { ultra:'0.35em' },
+        },
+      },
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,500&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    :root { --gold:#dcb43a; --gold-soft:#e6c659; }
+    html,body { background:#06060a; }
+    body { overflow-x:hidden; }
+
+    /* ───────── Animated aurora mesh ───────── */
+    .aurora { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+    .blob { position:absolute; border-radius:50%; filter:blur(90px); opacity:.5; will-change:transform; }
+    .blob-1 { width:46vw; height:46vw; left:-10vw; top:-8vw;  background:radial-gradient(circle at 30% 30%, #2a2140, transparent 70%); animation:drift1 26s ease-in-out infinite; }
+    .blob-2 { width:42vw; height:42vw; right:-8vw; top:6vw;   background:radial-gradient(circle at 50% 50%, #4a3a12, transparent 70%); animation:drift2 32s ease-in-out infinite; }
+    .blob-3 { width:50vw; height:50vw; left:18vw; bottom:-22vw; background:radial-gradient(circle at 50% 50%, #1e2b3a, transparent 70%); animation:drift3 30s ease-in-out infinite; }
+    @keyframes drift1 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(8vw,6vh) scale(1.15)} }
+    @keyframes drift2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-7vw,8vh) scale(1.1)} }
+    @keyframes drift3 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(6vw,-7vh) scale(1.2)} }
+
+    /* ───────── Film grain ───────── */
+    .grain { position:fixed; inset:-50%; z-index:1; pointer-events:none; opacity:.035; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); animation:grain 8s steps(8) infinite; }
+    @keyframes grain { 0%,100%{transform:translate(0,0)} 10%{transform:translate(-5%,-5%)} 30%{transform:translate(3%,-8%)} 50%{transform:translate(-4%,6%)} 70%{transform:translate(6%,3%)} 90%{transform:translate(-3%,5%)} }
+
+    /* ───────── Cursor glow ───────── */
+    .cursor-glow { position:fixed; width:520px; height:520px; border-radius:50%; pointer-events:none; z-index:2; transform:translate(-50%,-50%); background:radial-gradient(circle, rgba(220,180,58,.07), transparent 65%); transition:opacity .4s; }
+
+    /* ───────── Gold shimmer text ───────── */
+    .shimmer { background:linear-gradient(110deg,#cabfa6 20%,#fff5d6 40%,var(--gold) 52%,#fff5d6 60%,#cabfa6 80%); background-size:200% auto; -webkit-background-clip:text; background-clip:text; color:transparent; animation:shine 6s linear infinite; }
+    @keyframes shine { to{ background-position:-200% center } }
+
+    /* ───────── Reveal on scroll ───────── */
+    .reveal { opacity:0; transform:translateY(34px); transition:opacity .9s cubic-bezier(.2,.8,.2,1), transform .9s cubic-bezier(.2,.8,.2,1); }
+    .reveal.in { opacity:1; transform:none; }
+
+    /* ───────── Glass ───────── */
+    .glass { background:rgba(20,20,31,.55); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid rgba(220,180,58,.14); }
+    .glass-soft { background:rgba(255,255,255,.025); backdrop-filter:blur(14px); border:1px solid rgba(255,255,255,.06); }
+
+    /* hairline gold divider */
+    .rule-gold { height:1px; background:linear-gradient(90deg,transparent,rgba(220,180,58,.5),transparent); }
+
+    /* ───────── Drop zone ───────── */
+    .drop { position:relative; transition:all .35s ease; }
+    .drop::before { content:''; position:absolute; inset:0; border-radius:1.25rem; padding:1px; background:linear-gradient(120deg, rgba(220,180,58,.0), rgba(220,180,58,.45), rgba(220,180,58,.0)); -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; opacity:.5; transition:opacity .35s; }
+    .drop.drag::before { opacity:1; }
+    .drop.drag { transform:scale(1.012); background:rgba(220,180,58,.05); }
+
+    /* button shimmer */
+    .btn-gold { position:relative; overflow:hidden; background:linear-gradient(135deg,#e6c659,#cda227); color:#0a0a12; }
+    .btn-gold::after { content:''; position:absolute; top:0; left:-120%; width:60%; height:100%; background:linear-gradient(110deg,transparent,rgba(255,255,255,.55),transparent); transform:skewX(-18deg); transition:left .7s ease; }
+    .btn-gold:hover::after { left:140%; }
+    .btn-gold:disabled { background:#2a2a38; color:#5a5a6a; cursor:not-allowed; }
+    .btn-gold:disabled::after { display:none; }
+
+    /* shimmer skeleton */
+    @keyframes sh { 0%{background-position:-600px 0} 100%{background-position:600px 0} }
+    .sk { background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.10) 50%,rgba(255,255,255,.04) 75%); background-size:1200px 100%; animation:sh 1.6s infinite linear; }
+
+    /* stars */
+    .star { color:rgba(255,255,255,.14); transition:color .3s; }
+    .star.on { color:var(--gold); filter:drop-shadow(0 0 6px rgba(220,180,58,.5)); }
+
+    /* accordion chevron */
+    details>summary{ list-style:none; } details>summary::-webkit-details-marker{ display:none; }
+    details[open] .chev{ transform:rotate(180deg); } .chev{ transition:transform .25s; }
+
+    /* card entrance */
+    @keyframes rise { from{opacity:0; transform:translateY(40px) scale(.985)} to{opacity:1; transform:none} }
+    .rise { animation:rise .7s cubic-bezier(.2,.8,.2,1) both; }
+
+    /* scroll cue */
+    @keyframes bob { 0%,100%{transform:translateY(0); opacity:.4} 50%{transform:translateY(8px); opacity:1} }
+    .bob { animation:bob 2.2s ease-in-out infinite; }
+
+    /* scrollbar */
+    ::-webkit-scrollbar{ width:8px; } ::-webkit-scrollbar-track{ background:#0a0a12; }
+    ::-webkit-scrollbar-thumb{ background:linear-gradient(#a87f1c,#7f5e18); border-radius:9999px; }
+
+    ::selection{ background:rgba(220,180,58,.3); color:#fff; }
+    @media (prefers-reduced-motion:reduce){ *{animation:none!important; transition:none!important} .reveal{opacity:1;transform:none} }
+  </style>
+</head>
+
+<body class="font-sans text-sand-100 antialiased relative">
+
+  <!-- backdrop layers -->
+  <div class="aurora"><div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div></div>
+  <div class="grain"></div>
+  <div id="cursor" class="cursor-glow"></div>
+
+  <!-- ════════════ LOGIN SCREEN ════════════ -->
+  <div id="login-screen" class="fixed inset-0 z-[70] flex items-center justify-center px-6 transition-opacity duration-500">
+    <div class="glass rounded-3xl w-full max-w-md p-8 sm:p-10 shadow-2xl shadow-black/60 rise">
+      <div class="text-center mb-8">
+        <div class="w-16 h-16 mx-auto mb-5 rounded-2xl glass-soft flex items-center justify-center">
+          <svg class="w-8 h-8 text-gold-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v18m0 0H5m7 0h7M5 8l3.5 5.5M19 8l-3.5 5.5M8.5 8H2m20 0h-6.5M12 3l-2 5m2-5l2 5"/>
+          </svg>
+        </div>
+        <h1 class="font-display text-3xl text-sand-100">Law&nbsp;Lens</h1>
+        <p class="text-[11px] tracking-ultra uppercase text-gold-400 mt-2.5">The Headnote Atelier</p>
+        <div class="rule-gold w-24 mx-auto mt-5"></div>
+      </div>
+
+      <form id="login-form" class="space-y-5" autocomplete="on">
+        <div>
+          <label for="login-user" class="block text-[11px] uppercase tracking-widest text-gold-400/70 mb-2">Username</label>
+          <input id="login-user" name="username" type="text" autocomplete="username" required placeholder="your handle"
+            class="w-full bg-white/[.03] border border-white/10 focus:border-gold-400/60 focus:bg-white/[.05] rounded-xl px-4 py-3.5 text-sand-100 placeholder-sand-300/25 outline-none transition-all" />
+        </div>
+        <div>
+          <label for="login-pass" class="block text-[11px] uppercase tracking-widest text-gold-400/70 mb-2">Password</label>
+          <div class="relative">
+            <input id="login-pass" name="password" type="password" autocomplete="current-password" required placeholder="••••••••••"
+              class="w-full bg-white/[.03] border border-white/10 focus:border-gold-400/60 focus:bg-white/[.05] rounded-xl px-4 py-3.5 pr-12 text-sand-100 placeholder-sand-300/25 outline-none transition-all" />
+            <button type="button" id="toggle-pass" tabindex="-1" aria-label="Show password"
+              class="absolute right-3.5 top-1/2 -translate-y-1/2 text-sand-300/60 hover:text-gold-300 transition-colors">
+              <svg id="eye-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M2.5 12S5.5 5.5 12 5.5 21.5 12 21.5 12 18.5 18.5 12 18.5 2.5 12 2.5 12z" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg id="eye-off" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a3 3 0 004.2 4.2M9.9 5.7A9.6 9.6 0 0112 5.5c6.5 0 9.5 6.5 9.5 6.5a16 16 0 01-2.4 3.3M6.1 6.1A16 16 0 002.5 12s3 6.5 9.5 6.5a9.4 9.4 0 003.3-.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <p id="login-error" class="hidden text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5"></p>
+
+        <button id="login-btn" type="submit" class="btn-gold w-full rounded-xl py-4 font-semibold text-sm tracking-wide flex items-center justify-center gap-2">
+          <span id="login-btn-label">Enter the Studio</span>
+        </button>
+      </form>
+
+      <p class="text-center text-[11px] text-sand-300/50 mt-7 tracking-wide">Authorised access only · Demonstration build</p>
+    </div>
+  </div>
+
+  <!-- ════════════ APP (revealed after login) ════════════ -->
+  <div id="app" class="hidden">
+
+  <!-- ════════════ NAV ════════════ -->
+  <nav class="fixed top-0 inset-x-0 z-50 glass">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="#studio" class="flex items-center gap-3 group">
+        <svg class="w-7 h-7 text-gold-300 transition-transform group-hover:rotate-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v18m0 0H5m7 0h7M5 8l3.5 5.5M19 8l-3.5 5.5M8.5 8H2m20 0h-6.5M12 3l-2 5m2-5l2 5"/>
+        </svg>
+        <div class="leading-none">
+          <p class="font-display text-lg tracking-wide text-sand-100">Law&nbsp;Lens</p>
+          <p class="text-[10px] tracking-ultra text-gold-400 uppercase mt-0.5">Headnote Engine</p>
+        </div>
+      </a>
+      <div class="hidden md:flex items-center gap-8 text-sm text-sand-300">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="status-text" class="text-sand-300">Live</span>
+        </div>
+        <button onclick="logout()" class="flex items-center gap-1.5 text-xs text-sand-300 hover:text-gold-300 transition-colors">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M16 17l5-5-5-5M21 12H9M9 21H6a2 2 0 01-2-2V5a2 2 0 012-2h3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Sign out
+        </button>
+      </div>
+      <button onclick="logout()" class="md:hidden text-xs glass-soft px-4 py-2 rounded-full text-sand-300">Sign out</button>
+    </div>
+  </nav>
+
+  <!-- ════════════ STUDIO (UPLOAD) ════════════ -->
+  <section id="studio" class="relative z-10 max-w-5xl mx-auto px-6 pt-28 pb-12 scroll-mt-24">
+    <div class="reveal text-center mb-12">
+      <p id="craft" class="text-xs tracking-ultra uppercase text-gold-400 mb-4 scroll-mt-24">The Studio</p>
+      <h2 class="font-display text-4xl sm:text-5xl mb-3">Bring your judgments</h2>
+      <p class="text-sand-300 font-accent text-lg">Drop up to ten PDFs. Watch them become headnotes.</p>
+    </div>
+
+    <div class="reveal glass rounded-3xl p-6 sm:p-10 shadow-2xl shadow-black/40">
+
+      <!-- drop zone -->
+      <div id="drop-zone" class="drop rounded-2xl bg-white/[.015] py-16 px-6 text-center cursor-pointer" onclick="document.getElementById('file-input').click()">
+        <div class="w-16 h-16 mx-auto mb-5 rounded-2xl glass-soft flex items-center justify-center">
+          <svg class="w-8 h-8 text-gold-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 13h6m-3-3v6M3 16V7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+          </svg>
+        </div>
+        <p class="font-display text-2xl text-sand-100 mb-1">Drop judgment PDFs here</p>
+        <p class="text-sand-300 text-sm">or <span class="text-gold-300 underline-offset-4 hover:underline">browse your files</span> &nbsp;·&nbsp; up to 10 per batch</p>
+        <input id="file-input" type="file" accept=".pdf" multiple class="hidden" />
+      </div>
+
+      <!-- queue -->
+      <div id="file-queue" class="mt-5 space-y-2.5 hidden"></div>
+
+      <!-- actions -->
+      <div class="mt-7 flex flex-col sm:flex-row items-center gap-3">
+        <button id="extract-btn" disabled onclick="startExtraction()" class="btn-gold w-full sm:flex-1 rounded-xl py-4 font-semibold text-sm tracking-wide flex items-center justify-center gap-2.5">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          Distill Headnotes
+        </button>
+        <button id="clear-btn" onclick="clearAll()" class="hidden w-full sm:w-auto px-6 py-4 rounded-xl glass-soft text-sand-300 hover:text-gold-300 transition-colors text-sm">Clear</button>
+      </div>
+
+      <!-- progress -->
+      <div id="progress-bar" class="mt-6 hidden">
+        <div class="flex justify-between text-xs text-sand-300 mb-2">
+          <span id="progress-label" class="tracking-wide">Distilling…</span>
+          <span id="progress-count" class="font-mono"></span>
+        </div>
+        <div class="h-1.5 bg-white/5 rounded-full overflow-hidden">
+          <div id="progress-fill" class="h-full rounded-full transition-all duration-500" style="width:0%; background:linear-gradient(90deg,#7f5e18,#e6c659)"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ RESULTS ════════════ -->
+  <section id="results-section" class="relative z-10 max-w-5xl mx-auto px-6 space-y-8 pb-28"></section>
+
+  <!-- ════════════ FOOTER ════════════ -->
+  <footer class="relative z-10 border-t border-white/5">
+    <div class="max-w-7xl mx-auto px-6 py-12 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <svg class="w-6 h-6 text-gold-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 3v18M5 8l3.5 5.5M19 8l-3.5 5.5" stroke-linecap="round"/></svg>
+        <span class="font-display text-lg">Law Lens</span>
+      </div>
+      <p class="text-xs text-sand-300 text-center">Every headnote generated from the court's own text · For demonstration only</p>
+      <p class="text-xs text-sand-300 font-mono">© 2026</p>
+    </div>
+  </footer>
+
+  </div><!-- /#app -->
+
+  <!-- ════════════ SCRIPT ════════════ -->
+  <script>
+  /* ── State ── */
+  let pendingFiles = [];
+  let results = [];
+
+  /* ── Refs ── */
+  const $ = id => document.getElementById(id);
+
+  /* ════════════ AUTH ════════════ */
+  const AUTH_KEY = 'll_token';
+  let authToken = sessionStorage.getItem(AUTH_KEY) || '';
+  const loginScreen=$('login-screen'), appEl=$('app'), loginForm=$('login-form'),
+        loginError=$('login-error'), loginBtn=$('login-btn'), loginLabel=$('login-btn-label');
+
+  function authHeaders(){ return authToken ? { 'Authorization':'Bearer '+authToken } : {}; }
+
+  function revealApp(){
+    loginScreen.style.opacity='0';
+    setTimeout(()=>{
+      loginScreen.style.display='none';
+      appEl.classList.remove('hidden');
+      window.scrollTo(0,0);   // Studio is now the first thing in the app — no hero to skip.
+    }, 500);
+  }
+  function showLogin(msg){
+    appEl.classList.add('hidden');
+    loginScreen.style.display='flex';
+    requestAnimationFrame(()=>{ loginScreen.style.opacity='1'; });
+    if(msg){ loginError.textContent=msg; loginError.classList.remove('hidden'); }
+  }
+
+  async function doLogin(e){
+    e.preventDefault();
+    loginError.classList.add('hidden');
+    const username=$('login-user').value.trim();
+    const password=$('login-pass').value;
+    loginBtn.disabled=true; loginLabel.textContent='Verifying…';
+    try{
+      const resp=await fetch('/api/v1/login',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username,password}),
+      });
+      if(!resp.ok){
+        const err=await resp.json().catch(()=>({}));
+        throw new Error(err?.error?.message || 'Invalid username or password.');
+      }
+      const data=await resp.json();
+      authToken=data.token;
+      sessionStorage.setItem(AUTH_KEY, authToken);
+      $('login-pass').value='';
+      revealApp();
+    }catch(err){
+      loginError.textContent=String(err.message||err);
+      loginError.classList.remove('hidden');
+    }finally{
+      loginBtn.disabled=false; loginLabel.textContent='Enter the Studio';
+    }
+  }
+
+  function logout(){
+    authToken=''; sessionStorage.removeItem(AUTH_KEY);
+    pendingFiles=[]; results=[];
+    if(fileInput) fileInput.value='';
+    if(resultsSection) resultsSection.innerHTML='';
+    renderQueue(); progressBar.classList.add('hidden');
+    showLogin();
+  }
+
+  loginForm.addEventListener('submit', doLogin);
+
+  /* password visibility toggle */
+  $('toggle-pass').addEventListener('click', ()=>{
+    const inp=$('login-pass');
+    const show = inp.type==='password';
+    inp.type = show ? 'text' : 'password';
+    $('eye-open').classList.toggle('hidden', show);
+    $('eye-off').classList.toggle('hidden', !show);
+  });
+
+  /* boot: already authenticated this session? */
+  if(authToken){ loginScreen.style.display='none'; appEl.classList.remove('hidden'); }
+  else { loginScreen.style.opacity='1'; }
+  const dropZone=$('drop-zone'), fileInput=$('file-input'), fileQueue=$('file-queue'),
+        extractBtn=$('extract-btn'), clearBtn=$('clear-btn'), progressBar=$('progress-bar'),
+        progressFill=$('progress-fill'), progressLabel=$('progress-label'), progressCount=$('progress-count'),
+        resultsSection=$('results-section'), statusText=$('status-text');
+
+  /* ── Cursor glow ── */
+  const cursor=$('cursor');
+  let cx=window.innerWidth/2, cy=window.innerHeight/2, tx=cx, ty=cy;
+  window.addEventListener('pointermove', e=>{ tx=e.clientX; ty=e.clientY; });
+  (function loop(){ cx+=(tx-cx)*0.12; cy+=(ty-cy)*0.12; cursor.style.left=cx+'px'; cursor.style.top=cy+'px'; requestAnimationFrame(loop); })();
+
+  /* ── Scroll reveals ── */
+  const io = new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }), {threshold:.15});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  /* ── Count-up stats ── */
+  const cio = new IntersectionObserver(es=>es.forEach(e=>{
+    if(!e.isIntersecting) return;
+    const el=e.target, to=+el.dataset.to; let cur=0;
+    const step=()=>{ cur+=Math.max(1,to/40); if(cur>=to){el.textContent=to; return;} el.textContent=Math.floor(cur); requestAnimationFrame(step); };
+    step(); cio.unobserve(el);
+  }), {threshold:.6});
+  document.querySelectorAll('.count').forEach(el=>cio.observe(el));
+
+  /* ── Drag & drop ── */
+  ['dragenter','dragover'].forEach(ev=>dropZone.addEventListener(ev,e=>{e.preventDefault();dropZone.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>dropZone.addEventListener(ev,e=>{e.preventDefault();dropZone.classList.remove('drag');}));
+  dropZone.addEventListener('drop',e=>addFiles([...e.dataTransfer.files]));
+  fileInput.addEventListener('change',()=>addFiles([...fileInput.files]));
+
+  /* ── File management ── */
+  function addFiles(list){
+    const pdfs=list.filter(f=>f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf'));
+    pendingFiles=[...pendingFiles,...pdfs].slice(0,10);
+    renderQueue();
+  }
+  function renderQueue(){
+    if(!pendingFiles.length){ fileQueue.classList.add('hidden'); extractBtn.disabled=true; clearBtn.classList.add('hidden'); return; }
+    fileQueue.classList.remove('hidden'); clearBtn.classList.remove('hidden'); extractBtn.disabled=false;
+    fileQueue.innerHTML=pendingFiles.map((f,i)=>`
+      <div class="rise flex items-center justify-between glass-soft rounded-xl px-4 py-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-9 h-9 rounded-lg bg-gold-500/10 flex items-center justify-center flex-shrink-0">
+            <svg class="w-4 h-4 text-gold-300" viewBox="0 0 24 24" fill="currentColor"><path d="M7 2a2 2 0 00-2 2v16a2 2 0 002 2h10a2 2 0 002-2V8l-6-6H7z" opacity=".25"/><path d="M13 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          </div>
+          <span class="truncate text-sm text-sand-100">${esc(f.name)}</span>
+        </div>
+        <div class="flex items-center gap-3 flex-shrink-0 ml-3">
+          <span class="text-xs text-sand-300 font-mono">${formatBytes(f.size)}</span>
+          <button onclick="removeFile(${i})" class="text-sand-300 hover:text-red-400 transition-colors">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>`).join('');
+  }
+  function removeFile(i){ pendingFiles.splice(i,1); renderQueue(); }
+  function clearAll(){ pendingFiles=[]; fileInput.value=''; renderQueue(); resultsSection.innerHTML=''; results=[]; progressBar.classList.add('hidden'); setStatus('Live',false); }
+
+  /* ── Extraction ── */
+  async function startExtraction(){
+    if(!pendingFiles.length) return;
+    extractBtn.disabled=true; clearBtn.classList.add('hidden'); setStatus('Distilling…',false);
+    progressBar.classList.remove('hidden'); progressFill.style.width='0%';
+    progressLabel.textContent=`Distilling ${pendingFiles.length} judgment(s)…`; progressCount.textContent='';
+    resultsSection.innerHTML=pendingFiles.map(f=>skeletonCard(f.name)).join('');
+    resultsSection.scrollIntoView({behavior:'smooth',block:'start'});
+
+    const fd=new FormData(); pendingFiles.forEach(f=>fd.append('files',f));
+    let p=0; const ticker=setInterval(()=>{ p=Math.min(p+3,88); progressFill.style.width=p+'%'; },420);
+
+    try{
+      const resp=await fetch('/api/v1/extract',{method:'POST',headers:authHeaders(),body:fd});
+      clearInterval(ticker); progressFill.style.width='100%';
+      if(resp.status===401){
+        logout();
+        showLogin('Your session expired. Please sign in again.');
+        return;
+      }
+      if(!resp.ok){
+        const err=await resp.json().catch(()=>({error:{message:resp.statusText}}));
+        resultsSection.innerHTML=errorBanner(`Server error (${resp.status}): ${esc(err?.error?.message||resp.statusText)}`);
+        setStatus('Error',true); return;
+      }
+      results=await resp.json();
+      renderResults(results);
+      progressLabel.textContent=`Complete — ${results.length} headnote(s)`;
+      setStatus(`${results.length} ready`,false);
+      pendingFiles=[]; fileInput.value=''; renderQueue();
+    }catch(e){
+      clearInterval(ticker);
+      resultsSection.innerHTML=errorBanner(`Network error: ${esc(String(e))}`);
+      setStatus('Error',true);
+    }finally{
+      extractBtn.disabled=false; clearBtn.classList.remove('hidden');
+      setTimeout(()=>progressBar.classList.add('hidden'),1200);
+    }
+  }
+
+  /* ── Render ── */
+  function renderResults(items){
+    resultsSection.innerHTML=items.map((it,i)=> it.error_code ? renderError(it,i) : renderHeadnote(it,i)).join('');
+  }
+
+  function renderHeadnote(r,idx){
+    const stars=starsHTML(r.importance_score??0);
+    const citation=(r.parallel_citations&&r.parallel_citations.length)?r.parallel_citations[0]:null;
+    const badges=[];
+    if(r.subject_classification) badges.push(chip(r.subject_classification,'gold'));
+    if(r.outcome_label && r.outcome_label!=='Unknown') badges.push(chip(r.outcome_label,outcomeTone(r.outcome_label)));
+    if(r.bench_type_label && r.bench_type_label!=='Unknown') badges.push(chip(r.bench_type_label,'slate'));
+    if(r.decision_type_label) badges.push(chip(r.decision_type_label,'slate'));
+
+    const review=r.needs_review?`
+      <div class="flex items-start gap-3 rounded-xl px-4 py-3.5 mb-5" style="background:rgba(220,180,58,.07);border:1px solid rgba(220,180,58,.25)">
+        <svg class="w-4 h-4 flex-shrink-0 mt-0.5 text-gold-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.1c.766-1.36 2.72-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        <div><p class="font-semibold text-gold-200 text-sm mb-1">Manual review recommended</p>
+          <ul class="list-disc list-inside space-y-0.5 text-xs text-sand-300">${(r.review_reasons||[]).map(s=>`<li>${esc(s)}</li>`).join('')}</ul></div>
+      </div>`:'';
+
+    const ocr=r.used_ocr?`<span class="text-[11px] text-sand-300 flex items-center gap-1 font-mono uppercase tracking-wider"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6M7 21h10a2 2 0 002-2V9.4a1 1 0 00-.3-.7l-5.4-5.4a1 1 0 00-.7-.3H7a2 2 0 00-2 2v14a2 2 0 002 2z" stroke-linecap="round"/></svg>OCR</span>`:'';
+
+    const meta=[['Court',r.court],['Bench',r.bench],['Date',r.decision_date],['Case No.',r.case_number],['Citation',citation]]
+      .filter(([,v])=>v).map(([k,v])=>`
+        <div class="min-w-0"><dt class="text-[10px] font-semibold uppercase tracking-widest text-gold-400/70 mb-1">${esc(k)}</dt>
+        <dd class="text-sm text-sand-100 truncate" title="${esc(String(v))}">${esc(String(v))}</dd></div>`).join('');
+
+    const parties=(r.petitioner||r.respondent)?`
+      <div class="mt-3 flex items-baseline gap-2.5 text-sm flex-wrap">
+        <span class="text-sand-100 font-medium">${esc(r.petitioner||'—')}</span>
+        <span class="font-accent italic text-gold-400">versus</span>
+        <span class="text-sand-100 font-medium">${esc(r.respondent||'—')}</span></div>`:'';
+
+    const heads=(r.head_note||[]).map((h,i)=>headHTML(h,i)).join('');
+
+    const supp=[];
+    if(r.brief_facts?.trim()) supp.push(['Brief Facts',r.brief_facts]);
+    if(r.held?.trim()) supp.push(['Held',r.held]);
+    if(r.petitioner_argument?.trim()) supp.push(['Petitioner’s Argument',r.petitioner_argument]);
+    if(r.respondent_argument?.trim()) supp.push(['Respondent’s Argument',r.respondent_argument]);
+    if((r.statutes_with_sections||[]).length) supp.push(['Statutes & Sections',r.statutes_with_sections.join('  ·  ')]);
+    else if((r.statutes||[]).length) supp.push(['Statutes Referred',r.statutes.join('  ·  ')]);
+    if((r.cases_referred||[]).length) supp.push(['Cases Referred',r.cases_referred.join('\n')]);
+    if((r.keywords||[]).length) supp.push(['Keywords',r.keywords.join('  ·  ')]);
+
+    const suppHTML=supp.map(([k,v])=>`
+      <details class="glass-soft rounded-xl overflow-hidden">
+        <summary class="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none hover:bg-white/[.03] transition-colors text-sm font-medium text-sand-100">
+          <span class="font-accent text-base">${esc(k)}</span>
+          <svg class="chev w-4 h-4 text-gold-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round"/></svg>
+        </summary>
+        <div class="px-5 pb-4 text-sm text-sand-300 leading-relaxed whitespace-pre-line">${esc(String(v))}</div>
+      </details>`).join('');
+
+    const ms=r.processing_time_ms?`${(r.processing_time_ms/1000).toFixed(1)}s`:'';
+    const jsonId=`json-${idx}`;
+
+    return `
+    <article class="rise glass rounded-3xl overflow-hidden shadow-2xl shadow-black/40" style="animation-delay:${idx*.12}s">
+      <!-- header -->
+      <div class="relative px-7 py-7 border-b border-white/5" style="background:radial-gradient(120% 120% at 0% 0%, rgba(220,180,58,.10), transparent 60%)">
+        <div class="flex items-start justify-between gap-5">
+          <div class="min-w-0 flex-1">
+            <p class="text-[11px] text-gold-400/70 font-mono mb-2 truncate">${esc(r.filename||'')}</p>
+            <h3 class="font-display text-2xl sm:text-3xl leading-tight text-sand-100">${esc(r.case_name||'Untitled Judgment')}</h3>
+            ${parties}
+          </div>
+          <div class="flex flex-col items-end gap-2.5 flex-shrink-0">${stars}${ocr}</div>
+        </div>
+        ${badges.length?`<div class="flex flex-wrap gap-2 mt-5">${badges.join('')}</div>`:''}
+      </div>
+
+      ${meta?`<div class="px-7 py-5 border-b border-white/5"><dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-4">${meta}</dl></div>`:''}
+      ${review?`<div class="px-7 pt-6">${review}</div>`:''}
+
+      <!-- heads -->
+      <div class="px-7 py-6 space-y-4">
+        <div class="flex items-center gap-3">
+          <h4 class="font-accent text-xl text-sand-100">Headnote Heads</h4>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-300 font-mono">${(r.head_note||[]).length}</span>
+          <div class="flex-1 rule-gold"></div>
+        </div>
+        ${heads||'<p class="text-sm text-sand-300 italic">No headnote heads extracted.</p>'}
+      </div>
+
+      ${suppHTML?`<div class="px-7 pb-6 space-y-2.5">${suppHTML}</div>`:''}
+
+      <!-- footer -->
+      <div class="border-t border-white/5 px-7 py-4 flex items-center justify-between">
+        <span class="text-[11px] text-sand-300 font-mono">${ms?`distilled in ${ms}`:''}</span>
+        <div class="flex gap-2">
+          <button onclick="copyJSON(${idx})" class="text-xs glass-soft rounded-lg px-3.5 py-2 hover:text-gold-300 transition-colors text-sand-300 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-linecap="round"/></svg>Copy JSON</button>
+          <button onclick="downloadJSON(${idx})" class="text-xs btn-gold rounded-lg px-3.5 py-2 font-semibold flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round"/></svg>Download</button>
+        </div>
+      </div>
+      <script type="application/json" id="${jsonId}">${JSON.stringify(r).replace(/<\/script>/g,'<\\/script>')}<\/script>
+    </article>`;
+  }
+
+  function headHTML(h,i){
+    const auth=(h.cited_authorities||[]).length?`
+      <div class="mt-3 pt-3 border-t border-white/5">
+        <p class="text-[10px] font-semibold uppercase tracking-widest text-gold-400/70 mb-1.5">Relied On</p>
+        <ul class="space-y-1">${h.cited_authorities.map(a=>`<li class="text-xs text-sand-300 flex gap-2"><span class="text-gold-500">▸</span>${esc(a)}</li>`).join('')}</ul></div>`:'';
+    const paras=(h.paragraphs||[]).length?`<span class="text-[11px] font-mono text-gold-300 bg-gold-500/10 rounded px-2 py-0.5 whitespace-nowrap">¶ ${h.paragraphs.join(', ')}</span>`:'';
+    return `
+    <div class="rounded-2xl overflow-hidden border border-white/5">
+      <div class="px-5 py-3.5 flex items-start justify-between gap-3" style="background:linear-gradient(90deg,rgba(220,180,58,.08),transparent)">
+        <div class="flex items-start gap-3 min-w-0">
+          <span class="w-6 h-6 rounded-full bg-gold-500/20 text-gold-200 text-xs font-mono flex items-center justify-center flex-shrink-0 mt-0.5">${i+1}</span>
+          <p class="text-sm font-semibold text-gold-200 uppercase tracking-wide leading-snug">${esc(h.catchwords||'')}</p>
+        </div>${paras}
+      </div>
+      <div class="px-5 py-4 space-y-3">
+        ${h.holding?`<div><p class="text-[10px] font-semibold uppercase tracking-widest text-gold-400/70 mb-1">Holding</p><p class="text-sm text-sand-100 leading-relaxed">${esc(h.holding)}</p></div>`:''}
+        ${h.discussion?`<div><p class="text-[10px] font-semibold uppercase tracking-widest text-gold-400/70 mb-1">Discussion</p><p class="text-sm text-sand-300 leading-relaxed">${esc(h.discussion)}</p></div>`:''}
+        ${auth}
+      </div>
+    </div>`;
+  }
+
+  function renderError(r,idx){
+    return `
+    <article class="rise glass rounded-3xl overflow-hidden border border-red-500/20" style="animation-delay:${idx*.12}s">
+      <div class="px-7 py-6 flex items-start gap-4" style="background:radial-gradient(120% 120% at 0% 0%, rgba(239,68,68,.10), transparent 60%)">
+        <div class="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.7 7.3a1 1 0 00-1.4 1.4L8.6 10l-1.3 1.3a1 1 0 101.4 1.4L10 11.4l1.3 1.3a1 1 0 001.4-1.4L11.4 10l1.3-1.3a1 1 0 00-1.4-1.4L10 8.6 8.7 7.3z" clip-rule="evenodd"/></svg>
+        </div>
+        <div class="min-w-0">
+          <p class="font-display text-lg text-sand-100 truncate">${esc(r.filename||'Unknown file')}</p>
+          <p class="text-sm text-red-300/90 mt-1">${esc(r.message||'Extraction failed.')}</p>
+          <p class="text-[11px] font-mono text-red-400/60 mt-1.5">${esc(r.error_code||'')}</p>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function skeletonCard(name){
+    return `
+    <div class="glass rounded-3xl overflow-hidden">
+      <div class="px-7 py-7 border-b border-white/5">
+        <p class="text-[11px] text-gold-400/50 font-mono mb-3 truncate">${esc(name)}</p>
+        <div class="sk h-7 rounded-lg w-2/3 mb-3"></div>
+        <div class="sk h-4 rounded w-1/2"></div>
+      </div>
+      <div class="px-7 py-6 space-y-3">
+        <div class="sk h-3 rounded w-full"></div><div class="sk h-3 rounded w-5/6"></div><div class="sk h-3 rounded w-3/4"></div>
+      </div>
+    </div>`;
+  }
+
+  /* ── Helpers ── */
+  function chip(text,tone){
+    const tones={
+      gold:'bg-gold-500/15 text-gold-200 border-gold-500/25',
+      emerald:'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
+      red:'bg-red-500/15 text-red-300 border-red-500/25',
+      amber:'bg-amber-500/15 text-amber-300 border-amber-500/25',
+      blue:'bg-sky-500/15 text-sky-300 border-sky-500/25',
+      slate:'bg-white/5 text-sand-300 border-white/10',
+    };
+    return `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${tones[tone]||tones.slate}">${esc(text)}</span>`;
+  }
+  function outcomeTone(label){
+    const s=String(label).toLowerCase();
+    if(s.includes('allow')&&!s.includes('part')&&!s.includes('dis')) return 'emerald';
+    if(s.includes('dismiss')) return 'red';
+    if(s.includes('part')) return 'amber';
+    if(s.includes('remand')) return 'blue';
+    return 'slate';
+  }
+  function esc(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function formatBytes(b){ if(b<1024) return b+' B'; if(b<1048576) return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
+  function starsHTML(score){
+    const n=Math.round(Math.min(Math.max(score||0,0),5));
+    return `<div class="flex gap-0.5" title="Importance ${n}/5">${[1,2,3,4,5].map(i=>
+      `<svg class="w-4 h-4 star ${i<=n?'on':''}" viewBox="0 0 20 20" fill="currentColor"><path d="M9.05 2.93c.3-.92 1.6-.92 1.9 0l1.07 3.29a1 1 0 00.95.69h3.46c.97 0 1.37 1.24.59 1.81l-2.8 2.03a1 1 0 00-.36 1.12l1.07 3.29c.3.92-.76 1.69-1.54 1.12l-2.8-2.03a1 1 0 00-1.18 0l-2.8 2.03c-.78.57-1.84-.2-1.54-1.12l1.07-3.29a1 1 0 00-.36-1.12L2.98 8.72c-.78-.57-.38-1.81.59-1.81h3.46a1 1 0 00.95-.69l1.07-3.29z"/></svg>`).join('')}</div>`;
+  }
+  function setStatus(t,err){ statusText.textContent=t; statusText.className=err?'text-red-400':'text-sand-300'; }
+  function copyJSON(idx){
+    const blob=$(`json-${idx}`); if(!blob) return;
+    const pretty=JSON.stringify(JSON.parse(blob.textContent),null,2);
+    navigator.clipboard.writeText(pretty).then(()=>{ setStatus('JSON copied ✓',false); setTimeout(()=>setStatus('Live',false),2000); });
+  }
+  function downloadJSON(idx){
+    const r=results[idx]; if(!r) return;
+    const blob=new Blob([JSON.stringify(r,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=(r.filename||`headnote-${idx}`).replace(/\.pdf$/i,'')+'.headnote.json'; a.click();
+    URL.revokeObjectURL(url);
+  }
+  function errorBanner(msg){ return `<div class="glass rounded-2xl border border-red-500/20 text-red-300 px-6 py-5 text-sm">${msg}</div>`; }
+  </script>
+</body>
+</html>
